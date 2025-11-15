@@ -21,7 +21,7 @@ const Base64 = struct{
         defer allocator.free(buffer);
 
         for (str) |c| {
-            std.debug.print("{b} ", .{c});
+            std.debug.print("{c}", .{c});
         }
 
         std.debug.print("\n", .{});
@@ -33,41 +33,33 @@ const Base64 = struct{
             window_buf_idx += 1;
             
             if (window_buf_idx == 3) {
-                buffer[buffer_idx] = window_buf[0] >> 2;
-                buffer[buffer_idx+1] = ((window_buf[0] & 0x03) << 4) + (window_buf[1] >> 4);
-                buffer[buffer_idx+2] = ((window_buf[1] & 0x0f) << 2) + (window_buf[2] >> 6);
-                buffer[buffer_idx+3] = window_buf[2] & 0x0f;
-                std.debug.print("{b} {b} {b} {b} ", .{buffer[buffer_idx], buffer[buffer_idx+1], buffer[buffer_idx+2], buffer[buffer_idx+3]});
+                buffer[buffer_idx] = self.lkup_tbl[window_buf[0] >> 2];
+                buffer[buffer_idx+1] = self.lkup_tbl[((window_buf[0] & 0x03) << 4) + (window_buf[1] >> 4)];
+                buffer[buffer_idx+2] = self.lkup_tbl[((window_buf[1] & 0x0f) << 2) + (window_buf[2] >> 6)];
+                buffer[buffer_idx+3] = self.lkup_tbl[window_buf[2] & 0x0f];
                 window_buf_idx = 0;
                 buffer_idx += 4;
             }
         }
 
         if (window_buf_idx == 1) {
-            buffer[buffer_idx] = window_buf[0] >> 2;
-            buffer[buffer_idx+1] = ((window_buf[0] & 0x03) << 4) + (window_buf[1] >> 4);
+            buffer[buffer_idx] = self.lkup_tbl[window_buf[0] >> 2];
+            buffer[buffer_idx+1] = self.lkup_tbl[((window_buf[0] & 0x03) << 4)];
             buffer[buffer_idx+2] = '=';
             buffer[buffer_idx+3] = '=';
-            std.debug.print("{b} {b} {b} {b} ", .{buffer[buffer_idx], buffer[buffer_idx+1], buffer[buffer_idx+2], buffer[buffer_idx+3]});
             buffer_idx += 4;
         }
 
         if (window_buf_idx == 2) {
-            buffer[buffer_idx] = window_buf[0] >> 2;
-            buffer[buffer_idx+1] = ((window_buf[0] & 0x03) << 4) + (window_buf[1] >> 4);
-            buffer[buffer_idx+2] = ((window_buf[1] & 0x0f) << 2) + (window_buf[2] >> 6);
+            buffer[buffer_idx] = self.lkup_tbl[window_buf[0] >> 2];
+            buffer[buffer_idx+1] = self.lkup_tbl[((window_buf[0] & 0x03) << 4) + (window_buf[1] >> 4)];
+            buffer[buffer_idx+2] = self.lkup_tbl[((window_buf[1] & 0x0f) << 2)];
             buffer[buffer_idx+3] = '=';
-            std.debug.print("{b} {b} {b} {b} ", .{buffer[buffer_idx], buffer[buffer_idx+1], buffer[buffer_idx+2], buffer[buffer_idx+3]});
             buffer_idx += 4;
         }
 
-        std.debug.print("\n", .{});
         for (buffer) |b| {
-            var char: u8 = '=';
-            if (b < self.lkup_tbl.len) {
-                char = self.lkup_tbl[b];
-            }
-            std.debug.print("{c}", .{char});
+            std.debug.print("{c}", .{b});
         }
         std.debug.print("\n", .{});
         return &[0]u8{};
@@ -90,4 +82,15 @@ test "encode Hi" {
 test "encode Hello World" {
     const b64 = Base64.init();
     _ = try b64.encode("Hello World");
+}
+
+test "encode foobar" {
+    const b64 = Base64.init();
+    _ = try b64.encode("");
+    _ = try b64.encode("f");
+    _ = try b64.encode("fo");
+    _ = try b64.encode("foo");
+    _ = try b64.encode("foob");
+    _ = try b64.encode("fooba");
+    _ = try b64.encode("foobar");
 }
