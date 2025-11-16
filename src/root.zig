@@ -10,12 +10,32 @@ const Base64 = struct{
         };
     }
 
-    pub fn get_char(self: Base64, idx: usize) u8 {
+    fn get_char(self: Base64, idx: usize) u8 {
         return self.lkup_tbl[idx];
+    }
+
+    fn get_char_idx(self: Base64, char: u8) u8 {
+        if (char == '=') {
+            return 64;
+        }
+
+        var idx: u8 = 0;
+        for (self.lkup_tbl) |k| {
+            if (k == char) {
+                break;
+            }
+            idx += 1;
+        }
+
+        return idx;
     }
 
     fn encode_length(_: Base64, input_len: usize) !usize {
         return try std.math.divCeil(usize, input_len, 3)*4;
+    }
+
+    fn decode_length(_: Base64, input_len: usize, padding_len: usize) !usize {
+        return (input_len/4)*3-padding_len;
     }
     
     pub fn encode(self: Base64, allocator: std.mem.Allocator, str: []const u8) ![]u8 { 
@@ -61,12 +81,42 @@ const Base64 = struct{
         return buffer;
     }
 
-    pub fn decode(self: Base64, str: []u8) []u8 {
-        _ = self;
-        _ = str;
-        return &[0]u8{};
-    }
-    
+    pub fn decode(self: Base64, allocator: std.mem.Allocator, str: []const u8) ![]u8 {
+        if (str.len == 0) {
+            return "";
+        }
+        var padding_len: usize = 0;
+        if (str[str.len-2] == '=') {
+            padding_len = 2;
+        } else if (str[str.len-1] == '=') {
+            padding_len = 1;
+        }
+
+        const buffer = try allocator.alloc(u8, try self.decode_length(str.len, padding_len));
+        var buffer_idx: usize = 0;
+
+        var window_buf: [4]u8 = .{ 0, 0, 0, 0 };
+        var window_buf_idx: usize = 0;
+        for (str) |c| {
+            const k = self.get_char_idx(c);
+            window_buf[window_buf_idx] = k;
+            window_buf_idx += 1;
+
+            if(window_buf_idx == 4) {
+                buffer[buffer_idx] = (window_buf[0] << 2) + (window_buf[1] >> 4);
+                if (window_buf[2] != 64) {
+                    buffer[buffer_idx+1] = (window_buf[1] << 4) + (window_buf[2] >> 2);
+                }
+                if (window_buf[3] != 64) {
+                    buffer[buffer_idx+2] = (window_buf[2] << 6) + window_buf[3];
+                }
+                window_buf_idx = 0;
+                buffer_idx += 3;
+            }
+        }
+        
+        return buffer;
+    } 
 };
 
 
@@ -119,4 +169,55 @@ test "encode foobar" {
     const actual6 = try b64.encode(allocator, "foobar");
     defer allocator.free(actual6);
     try std.testing.expectEqualStrings("Zm9vYmFy", actual6);
+}
+
+test "decode Hi" {
+    const b64 = Base64.init();
+    const allocator = std.testing.allocator;
+    
+    const actual = try b64.decode(allocator, "SGk=");
+    defer allocator.free(actual);
+    try std.testing.expectEqualStrings("Hi", actual);
+}
+
+test "decode Hello World" {
+    const b64 = Base64.init();
+    const allocator = std.testing.allocator;
+
+    const actual = try b64.decode(allocator, "SGVsbG8gV29ybGQ=");
+    defer allocator.free(actual);
+    try std.testing.expectEqualStrings("Hello World", actual);
+}
+
+test "decode foobar" {
+    const b64 = Base64.init();
+    const allocator = std.testing.allocator;
+
+    const actual0 = try b64.decode(allocator, ""); 
+    defer allocator.free(actual0);
+    try std.testing.expectEqualStrings("", actual0);
+    
+    const actual1 = try b64.decode(allocator, "Zg==");
+    defer allocator.free(actual1);
+    try std.testing.expectEqualStrings("f", actual1);
+
+    const actual2 = try b64.decode(allocator, "Zm8=");
+    defer allocator.free(actual2);
+    try std.testing.expectEqualStrings("fo", actual2);
+    
+    const actual3 = try b64.decode(allocator, "Zm9v");
+    defer allocator.free(actual3);
+    try std.testing.expectEqualStrings("foo", actual3);
+   
+    const actual4 = try b64.decode(allocator, "Zm9vYg==");
+    defer allocator.free(actual4);
+    try std.testing.expectEqualStrings("foob", actual4);
+    
+    const actual5 = try b64.decode(allocator, "Zm9vYmE=");
+    defer allocator.free(actual5);
+    try std.testing.expectEqualStrings("fooba", actual5);
+    
+    const actual6 = try b64.decode(allocator, "Zm9vYmFy");
+    defer allocator.free(actual6);
+    try std.testing.expectEqualStrings("foobar", actual6);
 }
