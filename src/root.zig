@@ -14,8 +14,8 @@ const Base64 = struct{
         return self.lkup_tbl[idx];
     }
 
-    fn encode_length(_: Base64, input_len: usize) usize {
-        return ((input_len/4)+1)*4;
+    fn encode_length(_: Base64, input_len: usize) !usize {
+        return try std.math.divCeil(usize, input_len, 3)*4;
     }
     
     pub fn encode(self: Base64, allocator: std.mem.Allocator, str: []const u8) ![]u8 { 
@@ -23,7 +23,7 @@ const Base64 = struct{
             return "";
         }
 
-        const buffer = try allocator.alloc(u8, self.encode_length(str.len));
+        const buffer = try allocator.alloc(u8, try self.encode_length(str.len));
 
         var window_buf = [3]u8{0, 0, 0};
         var window_buf_idx: u8 = 0;
@@ -80,10 +80,12 @@ test "encode Hi" {
 }
 
 test "encode Hello World" {
-    //const b64 = Base64.init();
-    //const allocator = std.testing.allocator;
-    //const actual = try b64.encode(allocator, "Hello World");
-    //allocator.free(actual);
+    const b64 = Base64.init();
+    const allocator = std.testing.allocator;
+    
+    const actual = try b64.encode(allocator, "Hello World");
+    defer allocator.free(actual);
+    try std.testing.expectEqualStrings("SGVsbG8gV29ybGQ=", actual);
 }
 
 test "encode foobar" {
